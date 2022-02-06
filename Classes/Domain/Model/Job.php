@@ -697,11 +697,13 @@ class Job extends AbstractEntity
             $data['jobLocation'][] = $location;
         }
 
-        $data['baseSalary']['@type'] = 'MonetaryAmount';
-        $data['baseSalary']['currency'] = $this->getBaseSalaryCurrency();
-        $data['baseSalary']['value']['@type'] = 'QuantitativeValue';
-        $data['baseSalary']['value']['value'] = $this->getBaseSalaryValue();
-        $data['baseSalary']['value']['unitText'] = $this->getBaseSalaryUnitText();
+        if($this->getBaseSalaryValue() > 0) {
+            $data['baseSalary']['@type'] = 'MonetaryAmount';
+            $data['baseSalary']['currency'] = $this->getBaseSalaryCurrency();
+            $data['baseSalary']['value']['@type'] = 'QuantitativeValue';
+            $data['baseSalary']['value']['value'] = $this->getBaseSalaryValue();
+            $data['baseSalary']['value']['unitText'] = $this->getBaseSalaryUnitText();
+        }
 
         if($this->getJobLocationType()) {
             $data['jobLocationType'] = 'TELECOMMUTE';
