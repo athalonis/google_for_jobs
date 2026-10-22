@@ -19,10 +19,10 @@ return [
         ],
         'requestUpdate' => 'job_location_type, base_salary_enable',
         'searchFields' => 'title,description,hiring_organization_name,hiring_organization_website,hiring_organization_logo_url,job_locations,base_salary_currency,base_salary_unit_text,employment_type,job_location_type,applicant_location_requirements',
-        'iconfile' => 'EXT:google_for_jobs/Resources/Public/Icons/tx_googleforjobs_domain_model_job.gif'
-    ],
-    'interface' => [
-        'showRecordFieldList' => 'sys_language_uid, l10n_parent, l10n_diffsource, hidden, title, description, date_posted, hiring_organization_name, hiring_organization_website, hiring_organization_logo_url, job_locations, valid_through, base_salary_enable, base_salary_currency, base_salary_unit_text, base_salary_value, employment_type, job_location_type, applicant_location_requirements, direct_apply',
+        'iconfile' => 'EXT:google_for_jobs/Resources/Public/Icons/tx_googleforjobs_domain_model_job.gif',
+        'security' => [
+            'ignorePageTypeRestriction' => true,
+        ],
     ],
     'types' => [
         '1' => [
