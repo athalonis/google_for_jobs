@@ -703,83 +703,118 @@ class Job extends AbstractEntity
      */
     public function createStructuredData(): string
     {
-        $data = [];
-        // mandatory key/value
-        $data['@context'] = "https://schema.org/";
-        // mandatory key/value
-        $data['@type'] = 'JobPosting';
-        // title of the job offer
-        $data['title'] = htmlspecialchars($this->getTitle());
-        // Full HTML description of the job offer
-        $data['description'] = htmlspecialchars($this->getDescription());
-        // Creation date of the job offer, converts crdate field (unix time) to Y-m-d format
-        $data['datePosted'] = htmlspecialchars($this->getDatePosted()->format('Y-m-d'));
-        // date through which the offer is valid (format: Y-m-d)
-        $validThrough =  $this->getValidThrough();
-        if ($validThrough) {
-            $data['validThrough'] = htmlspecialchars($validThrough->format('Y-m-d'));
-        }
-        // type of employment (valid values: FULL_TIME, PART_TIME, CONTRACTOR, TEMPORARY, INTERN, VOLUNTEER, PER_DIEM, OTHER)
-        $data['employmentType'] = explode(',', htmlspecialchars($this->getEmploymentType()));
- 
-        // mandatory key/value
-        $data['identifier']['@type'] = 'PropertyValue';
-        // name of the offering organization
-        $data['identifier']['name'] = htmlspecialchars($this->getHiringOrganizationName());
-        // unique ID for the job offer, uses the CE uid converted to a string
-        $data['identifier']['value'] = $this->getUid();
- 
-        // mandatory key/value
-        $data['hiringOrganization']['@type'] = 'Organization';
-        // name of the offering organization
-        $data['hiringOrganization']['name'] = htmlspecialchars($this->getHiringOrganizationName());
-        // website of the hiring organization
-        $data['hiringOrganization']['sameAs'] = htmlspecialchars($this->getHiringOrganizationWebsite());
-        // logo of the hiring organization
-        $data['hiringOrganization']['logo'] = htmlspecialchars($this->getHiringOrganizationLogoUrl());
+        $data = [
+            '@context' => 'https://schema.org/',
+            '@type' => 'JobPosting',
+            'title' => $this->getTitle(),
+            // Keep raw HTML; json_encode() escapes safely for JSON-LD.
+            'description' => $this->getDescription(),
+            'datePosted' => $this->getDatePosted()->format('Y-m-d'),
+            'directApply' => (bool)$this->getDirectApply(),
+        ];
 
+        $validThrough = $this->getValidThrough();
+        if ($validThrough instanceof \DateTimeInterface) {
+            $data['validThrough'] = $validThrough->format('Y-m-d');
+        }
+
+        $employmentTypes = array_values(array_filter(
+            array_map('trim', explode(',', (string)$this->getEmploymentType())),
+            static fn(string $type): bool => $type !== ''
+        ));
+        if ($employmentTypes !== []) {
+            $data['employmentType'] = count($employmentTypes) === 1 ? $employmentTypes[0] : $employmentTypes;
+        }
+
+        $hiringOrganizationName = trim($this->getHiringOrganizationName());
+        $data['identifier'] = [
+            '@type' => 'PropertyValue',
+            'name' => $hiringOrganizationName,
+            'value' => (string)$this->getUid(),
+        ];
+
+        $hiringOrganization = [
+            '@type' => 'Organization',
+            'name' => $hiringOrganizationName,
+        ];
+        $website = trim($this->getHiringOrganizationWebsite());
+        if ($website !== '') {
+            $hiringOrganization['sameAs'] = $website;
+        }
+        $logo = trim($this->getHiringOrganizationLogoUrl());
+        if ($logo !== '') {
+            $hiringOrganization['logo'] = $logo;
+        }
+        $data['hiringOrganization'] = $hiringOrganization;
+
+        $jobLocations = [];
         foreach ($this->getJobLocations() as $jobLocation) {
-            $location = [];
-            // mandatory key/value
-            $location['@type'] = 'Place';
-            // mandatory key/value
-            $location['address']['@type'] = 'PostalAddress';
-            // street and no. of the job location
-            $location['address']['streetAddress'] = htmlspecialchars($jobLocation->getStreetAddress());
-            // city of the job location
-            $location['address']['addressLocality'] = htmlspecialchars($jobLocation->getCity());
-            // region of the job location
-            $location['address']['addressRegion'] = htmlspecialchars($jobLocation->getRegion());
-            // postal code of the job location
-            $location['address']['postalCode'] = htmlspecialchars($jobLocation->getPostalCode());
-            // country of the job location
-            $location['address']['addressCountry'] = htmlspecialchars($jobLocation->getCountry());
+            $address = ['@type' => 'PostalAddress'];
+            $streetAddress = trim($jobLocation->getStreetAddress());
+            $city = trim($jobLocation->getCity());
+            $region = trim($jobLocation->getRegion());
+            $postalCode = trim($jobLocation->getPostalCode());
+            $country = trim($jobLocation->getCountry());
 
-            $data['jobLocation'][] = $location;
+            if ($streetAddress !== '') {
+                $address['streetAddress'] = $streetAddress;
+            }
+            if ($city !== '') {
+                $address['addressLocality'] = $city;
+            }
+            if ($region !== '') {
+                $address['addressRegion'] = $region;
+            }
+            if ($postalCode !== '') {
+                $address['postalCode'] = $postalCode;
+            }
+            if ($country !== '') {
+                $address['addressCountry'] = $country;
+            }
+
+            // Google requires addressCountry when a physical jobLocation is present.
+            if ($country === '') {
+                continue;
+            }
+
+            $jobLocations[] = [
+                '@type' => 'Place',
+                'address' => $address,
+            ];
+        }
+        if ($jobLocations !== []) {
+            $data['jobLocation'] = count($jobLocations) === 1 ? $jobLocations[0] : $jobLocations;
         }
 
-        if($this->getBaseSalaryEnable()) {
-            $data['baseSalary']['@type'] = 'MonetaryAmount';
-            $data['baseSalary']['currency'] = htmlspecialchars($this->getBaseSalaryCurrency());
-            $data['baseSalary']['value']['@type'] = 'QuantitativeValue';
-            $data['baseSalary']['value']['value'] = $this->getBaseSalaryValue();
-            $data['baseSalary']['value']['unitText'] = htmlspecialchars($this->getBaseSalaryUnitText());
+        if ($this->getBaseSalaryEnable()) {
+            $currency = trim($this->getBaseSalaryCurrency());
+            $unitText = trim($this->getBaseSalaryUnitText());
+            if ($currency !== '' && $unitText !== '') {
+                $data['baseSalary'] = [
+                    '@type' => 'MonetaryAmount',
+                    'currency' => $currency,
+                    'value' => [
+                        '@type' => 'QuantitativeValue',
+                        'value' => $this->getBaseSalaryValue(),
+                        'unitText' => $unitText,
+                    ],
+                ];
+            }
         }
-
 
         if ($this->getJobLocationType()) {
             $data['jobLocationType'] = 'TELECOMMUTE';
-            $data['applicantLocationRequirement']['@type'] = 'Country';
-            $data['applicantLocationRequirement']['name'] = htmlspecialchars($this->getApplicantLocationRequirements());
+            $applicantCountry = trim($this->getApplicantLocationRequirements());
+            if ($applicantCountry !== '') {
+                $data['applicantLocationRequirements'] = [
+                    '@type' => 'Country',
+                    'name' => $applicantCountry,
+                ];
+            }
         }
 
-        $data['directApply'] = $this->getDirectApply() ? true : false;
- 
-        $jsonData = json_encode($data);
+        $jsonData = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
-        // add script tag
-        $sturcturedData = '<script type="application/ld+json">' . $jsonData . '</script>';
-
-        return $sturcturedData;
+        return '<script type="application/ld+json">' . $jsonData . '</script>';
     }
 }
